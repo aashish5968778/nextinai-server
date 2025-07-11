@@ -1,26 +1,21 @@
 from flask import Flask, jsonify
-import requests
-import os
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 app = Flask(__name__)
 
-# Public JSON feed from your Google Sheet
-GOOGLE_SHEET_URL = "https://gsx2json.com/api?id=1FMl9eyC0XvEBMFr-feFxNMGC2Gxxy6xGIGlK-GMUXks&sheet=Sheet1"
+# Setup the credentials and open the sheet
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+client = gspread.authorize(creds)
 
-@app.route('/')
-def home():
-    return "✅ NextinAI API is live!"
+# Open your Google Sheet by name
+sheet = client.open("NextinAI News").sheet1  # Make sure the name matches exactly
 
 @app.route('/news', methods=['GET'])
 def get_news():
-    try:
-        response = requests.get(GOOGLE_SHEET_URL)
-        response.raise_for_status()
-        data = response.json()
-        return jsonify(data['rows'])
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    data = sheet.get_all_records()
+    return jsonify(data)
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(debug=True)
