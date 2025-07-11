@@ -5,29 +5,60 @@ from oauth2client.service_account import ServiceAccountCredentials
 import json
 import os
 
+# ------------------------------------------------------------------
+# 1. Flask setup
+# ------------------------------------------------------------------
 app = Flask(__name__)
-CORS(app)  # Allow cross-origin requests (for Flutter web)
+CORS(app)  # allow requests from your Flutter Web app
 
-# Step 1: Read credentials from env variable
-creds_json_str = os.environ.get("GOOGLE_CREDS_JSON")
+# ------------------------------------------------------------------
+# 2. Load credentials (stored in Render ▸ Environment ▸ Variables)
+#    Key: GOOGLE_CREDS_JSON   Value: *entire JSON key as one line*
+# ------------------------------------------------------------------
+creds_json_str = os.environ.get("GOOGLE_CREDS_JSON")  # ← comes from Render env var
 if not creds_json_str:
-    raise Exception("GOOGLE_CREDS_JSON not found in environment variables")
+    raise RuntimeError(
+        "❌  GOOGLE_CREDS_JSON environment variable is missing.\n"
+        "    Add it in Render → Environment → Add Env Var."
+    )
 
 creds_dict = json.loads(creds_json_str)
 
-# Step 2: Authenticate with Google Sheets
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+# ------------------------------------------------------------------
+# 3. Google Sheets client
+# ------------------------------------------------------------------
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive",
+]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 
-# Step 3: Open your sheet
-sheet = client.open("NextinAI News").sheet1
+# Open the first worksheet of the spreadsheet titled exactly "NextinAI News"
+sheet = client.open("NextinAI News").sheet1  # check spelling/capitalisation!
 
-# Step 4: Create your endpoint
-@app.route('/news', methods=['GET'])
+# ------------------------------------------------------------------
+# 4. Routes
+# ------------------------------------------------------------------
+@app.route("/")
+def alive():
+    return "✅ NextinAI API is live!"
+
+@app.route("/news", methods=["GET"])
 def get_news():
-    data = sheet.get_all_records()
-    return jsonify(data)
+    """
+    Returns all rows (as list of dicts) from your Google Sheet.
+    Column names are taken from the first row.
+    """
+    rows = sheet.get_all_records()  # list[dict]
+    return jsonify(rows)
 
-if __name__ == '__main__':
-    app.run(debug=True)
+# ------------------------------------------------------------------
+# 5. Run (local dev) or bind correctly on Render/Heroku/etc.
+# ------------------------------------------------------------------
+if __name__ == "__main__":
+    # If Render sets PORT (e.g. 10000-59999) use that, else default to 5000
+    port = int(os.environ.get("PORT", 5000))
+
+    # host='0.0.0.0' is critical for Render so that the container listens externally
+    app.run(host="0.0.0.0", port=port, debug=True)  # ▸ set debug=False in prod
