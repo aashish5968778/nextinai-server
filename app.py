@@ -1,21 +1,11 @@
-from flask import Flask, jsonify
+import os
+import json
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
-app = Flask(__name__)
+# Read the secret from environment
+creds_dict = json.loads(os.environ["GOOGLE_CREDS_JSON"])
+creds = Credentials.from_service_account_info(creds_dict)
 
-# Setup the credentials and open the sheet
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
-
-# Open your Google Sheet by name
-sheet = client.open("NextinAI News").sheet1  # Make sure the name matches exactly
-
-@app.route('/news', methods=['GET'])
-def get_news():
-    data = sheet.get_all_records()
-    return jsonify(data)
-
-if __name__ == '__main__':
-    app.run(debug=True)
+sheet = client.open("NextinAI News").sheet1
