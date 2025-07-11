@@ -1,5 +1,6 @@
 from flask import Flask, jsonify
 import requests
+import os
 
 app = Flask(__name__)
 
@@ -13,4 +14,5 @@ def get_news():
     return jsonify(data['rows'])
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 10000))  # Render sets PORT automatically
+    app.run(host='0.0.0.0', port=port, debug=True)
