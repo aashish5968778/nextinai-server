@@ -1,4 +1,5 @@
 Flask
 gspread
 oauth2client
-flask-cors
+Flask-Cors
+gunicorn
