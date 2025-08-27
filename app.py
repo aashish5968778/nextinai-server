@@ -13,8 +13,7 @@ app = Flask(__name__)
 CORS(app)  # allow requests from your Flutter Web app
 
 # ------------------------------------------------------------------
-# 2) Load credentials (Render ▸ Environment ▸ Variables)
-#    Key: GOOGLE_CREDS_JSON   Value: *entire service-account JSON (one line)*
+# 2) Load credentials
 # ------------------------------------------------------------------
 creds_json_str = os.environ.get("GOOGLE_CREDS_JSON")
 if not creds_json_str:
@@ -43,15 +42,20 @@ news_sheet = spreadsheet.sheet1
 try:
     tools_sheet = spreadsheet.worksheet("tools")
 except gspread.exceptions.WorksheetNotFound:
-    tools_sheet = None  # Will raise a clear error when /tools is called
+    tools_sheet = None
 
 try:
     courses_sheet = spreadsheet.worksheet("courses")
 except gspread.exceptions.WorksheetNotFound:
-    courses_sheet = None  # Will raise a clear error when /courses is called
+    courses_sheet = None
+
+try:
+    lessons_sheet = spreadsheet.worksheet("lessons")
+except gspread.exceptions.WorksheetNotFound:
+    lessons_sheet = None
 
 # ------------------------------------------------------------------
-# 4) Small in-memory cache (per process). Reset on redeploy/sleep.
+# 4) Small in-memory cache
 # ------------------------------------------------------------------
 _cache: dict[str, tuple[float, dict]] = {}  # key -> (expires_epoch, payload)
 
@@ -74,7 +78,6 @@ def cache_response(payload: dict, max_age: int = 300):
     return resp
 
 def normalize_row(row: dict) -> dict:
-    """Trim strings for consistent filtering."""
     def norm(v):
         return v.strip() if isinstance(v, str) else v
     return {k: norm(v) for k, v in row.items()}
@@ -88,8 +91,8 @@ def alive():
 
 @app.route("/news", methods=["GET"])
 def get_news():
-    rows = news_sheet.get_all_records()  # list[dict]
-    return cache_response(rows, max_age=120)  # 2 min cache
+    rows = news_sheet.get_all_records()
+    return cache_response(rows, max_age=120)
 
 @app.route("/tools", methods=["GET"])
 def get_tools():
@@ -152,11 +155,6 @@ def get_tools():
 
 @app.route("/courses", methods=["GET"])
 def get_courses():
-    """
-    Returns Courses from the 'courses' worksheet in the same spreadsheet.
-    Expected columns (header row):
-      id | title | subtitle | coverUrl | totalLessons | estMins | tags
-    """
     if courses_sheet is None:
         return jsonify({
             "ok": False,
@@ -204,8 +202,27 @@ def get_courses():
     cache_put(cache_key, payload, ttl_sec=300)
     return cache_response(payload, max_age=300)
 
+@app.route("/lessons/<courseId>", methods=["GET"])
+def get_lessons(courseId):
+    if lessons_sheet is None:
+        return jsonify({
+            "ok": False,
+            "error": "Worksheet 'lessons' not found. Create a tab named exactly 'lessons'."
+        }), 400
+
+    rows = [normalize_row(r) for r in lessons_sheet.get_all_records()]
+    lessons = [r for r in rows if r.get("courseid") == courseId]
+    lessons.sort(key=lambda r: int(r.get("order", 0)))
+
+    payload = {
+        "ok": True,
+        "total": len(lessons),
+        "items": lessons,
+    }
+    return cache_response(payload, max_age=120)
+
 # ------------------------------------------------------------------
-# 6) Run (local dev) or bind correctly on Render/Heroku/etc.
+# 6) Run
 # ------------------------------------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
